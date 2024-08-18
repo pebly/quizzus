@@ -4,6 +4,7 @@ import axios from 'axios';
 import CookieWorker from './../workers/cookie';
 
 
+
 const Lobby = () => {
     const [userName, setUserName] = useState('');
     const navigate = useNavigate();
@@ -13,6 +14,7 @@ const Lobby = () => {
             uuid: CookieWorker.getCookie('UserId'),
             username: userName
         });
+
         navigate(`/play/${response.data.id}`);
     };
 

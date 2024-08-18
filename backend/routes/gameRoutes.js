@@ -1,12 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const LobbyManager = require('../controllers/lobbyController');
+const LobbyController = require('../controllers/lobbyController');
 
-router.post('/game', LobbyManager.createLobby);
-router.get('/game');
-router.post('/random', LobbyManager.joinRandomLobby);
-router.post('/join', LobbyManager.joinPrivateLobby);
 
-// router.get('/game/:id', GameController.getGameById);
 
-module.exports = router;
+module.exports = (lobbyManager) => 
+{
+    const router = express.Router();
+
+    router.post('/game', (req, res) => LobbyController.createLobby(req, res, lobbyManager));
+    router.get('/game');
+    router.post('/join', (req, res) => LobbyController.joinPrivateLobby(req, res, lobbyManager));
+    router.post('/random', (req, res) => LobbyController.joinRandomLobby(req, res, lobbyManager));
+
+    return router;
+};
+

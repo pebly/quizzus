@@ -1,33 +1,32 @@
-const Lobby = require('../models/lobbyModel');
 
 const LobbyController = {
-    createLobby: (req, res) => {
+    createLobby: (req, res, lobbyManager) => {
         const { uuid, username } = req.body;
-        Lobby.createLobby(uuid, username, (err, game) => {
+        lobbyManager.createLobby(uuid, username, (err, response) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json(game);
+            res.json(response);
         });
     },
 
-    joinRandomLobby: (req, res) => {
+    joinRandomLobby: (req, res, lobbyManager) => {
         const { uuid, username } = req.body;
-        Lobby.joinRandomLobby(uuid, username, (err, game) => {
+        lobbyManager.joinRandomLobby(uuid, username, (err, response) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json(game);
+            res.json(response);
         });
     },
 
-    joinPrivateLobby: (req, res) => {
+    joinPrivateLobby: (req, res, lobbyManager) => {
         const { uuid, username, inviteCode } = req.body;
-        Lobby.joinPrivateLobby(uuid, username, inviteCode, (err, lobby) => {
+        lobbyManager.joinPrivateLobby(uuid, username, inviteCode, (err, response) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json(lobby);
+            res.json(response);
         });
     },
 
-    getLobbyById: (req, res) => {
+    getLobbyById: (req, res, lobbyManager) => {
         const gameId = req.params.id;
-        Lobby.getLobby((err, lobby) => {
+        lobbyManager.getLobby((err, lobby) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(lobby);
         });

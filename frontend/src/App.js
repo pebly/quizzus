@@ -7,11 +7,12 @@ import Leaderboard from './components/Leaderboard';
 import {v4 as uuid} from 'uuid';
 import CookieWorker from './workers/cookie';
 
+
 const App = () => {
     const [userId, setUserId] = useState('');
     
     useEffect(() => {
-        let userId = CookieWorker.setCookie('UserId');
+        let userId = CookieWorker.getCookie('UserId');
         if(!userId)
         {
             userId = uuid();
