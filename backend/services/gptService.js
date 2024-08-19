@@ -1,5 +1,5 @@
 const { OpenAI } = require('openai');
-const apiKey = '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';
+const apiKey = '';
 const openai = new OpenAI({apiKey: apiKey});
 
 const generateQuestion = async (settings) => {
