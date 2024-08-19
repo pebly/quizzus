@@ -16,7 +16,7 @@ const App = () => {
         if(!userId)
         {
             userId = uuid();
-            CookieWorker.setCookie('UserId', userId);
+            CookieWorker.setCookie('UserId', userId, 9999);
         }
     }, []);
 

@@ -7,6 +7,8 @@ const database = require('./database');
 
 const createLobbyManager = require('./models/lobbyModel');
 
+const gpt = require('./services/gptService');
+
 const app = express();
 
 app.use(cors());
@@ -24,6 +26,7 @@ app.use('/api', gameRoutes);
 app.get('/', (req, res) => {
     res.send('Server is running');
 });
+
 
 const PORT = process.env.PORT || 5000;
 
