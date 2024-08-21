@@ -12,6 +12,7 @@ const LobbyController = {
         const { uuid, username } = req.body;
         lobbyManager.joinRandomLobby(uuid, username, (err, response) => {
             if (err) return res.status(500).json({ error: err.message });
+            if (response === null) return res.status(204).json({message: 'No lobbies found!'});
             res.json(response);
         });
     },

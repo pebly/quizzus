@@ -15,7 +15,7 @@ class LobbyManager {
         LobbyManager.instance = this;
     }
 
-    createLobby(adminId, username, callback) {
+    async createLobby(adminId, username, callback) {
         try {
             const lobbyId = uuidv4();
             const lobby = {
@@ -26,7 +26,8 @@ class LobbyManager {
                     timePerQuestion: 0,
                     language: '',
                     subject: '',
-                    source: ''
+                    source: '',
+                    maxPlayers: 8,
                 },
                 players: [
                     {
@@ -37,18 +38,12 @@ class LobbyManager {
                         data: {
                             score: 0,
                             hasAnswered: false
-                        }
+                        },
+                        score: 0,
                     }
                 ],
                 hasStarted: false,
-                questionData: [
-                    {
-                        question: null,
-                        questionType: null,
-                        questionAnswers: [],
-                        correctAnswersIndexes: []
-                    }
-                ],
+                questionData: null,
                 currentRoundQuestion: 0,
                 currentRoundTime: 0,
                 currentRoundTimer: null,
@@ -62,15 +57,36 @@ class LobbyManager {
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
 
+
             async function calculateScores(socket) {
                 for (const [i, e] of lobby.questionData.entries()) {
                     const currentQuestionSubmits = lobby.allSubmits.filter(submit => submit.questionIndex === i);
-                    socket.emit('loadQuestionEnd', e);
+                    let index = 0;
                     for (const submit of currentQuestionSubmits) {
-                        socket.emit('loadQuestionIndividualAnswer', submit);
-                        if (e.questionType === 'response') await sleep(5000);
+                        const gptResponse = await GPTService.evaluateAnswer(e.question, submit.questionResponse, e.questionType, e.personality);
+                        socket.emit('loadQuestionEnd', e);
+                        if (e.questionType !== 'checkbox') {
+                            socket.emit('loadQuestionIndividualAnswer', { submit: submit, gpt: gptResponse });
+                            await sleep(5000);
+                        } else {
+                            socket.to(submit.socketId).emit('loadQuestionIndividualAnswer', { submit: submit, gpt: null });
+                        }
+            
+                        const player = lobby.players.find(player => player.socketId === submit.socketId);
+                        if (player && Array.isArray(e.correctAnswersIndexes)) {
+                            console.log(gptResponse);
+                            if(e.questionType === 'checkbox')
+                                player.score += (e.correctAnswersIndexes.includes(index) && submit.questionAnswers[index] === true) ? 25 : !(e.correctAnswersIndexes.includes(index) && submit.questionAnswers[index] === true) ? -25 : 0;
+                            else if(e.questionType === 'response')
+                                player.score += (gptResponse.correctness) * 2.5;
+                            else
+                                player.score += (gptResponse.correctness) * 1.25 + (gptReponse.personality) * 1.25;
+                            
+                            console.log(player.score);
+                            socket.emit('updatePlayerList', lobby.players);
+                        }
                     }
-                    if (e.questionType !== 'response') await sleep(5000);
+                    if (e.questionType === 'checkbox') await sleep(5000);
                 }
             }
 
@@ -84,7 +100,6 @@ class LobbyManager {
 
                 socket.on('disconnect', () => {
                     let disconnectedUser = lobby.players.find(player => player.socketId === socket.id);
-                    console.log(socket);
                     console.log(`User disconnected from lobby ${lobbyId}\n`);
 
                     let adminDisconnected = false;
@@ -125,7 +140,7 @@ class LobbyManager {
                     }
                 });
 
-                socket.on('startGame', (arg) => {
+                socket.on('startGame', async (arg) => {
                     if (lobby.players.find(player => player.socketId === socket.id && player.isAdmin === true)) {
                         lobby.hasStarted = true;
                         lobby.settings = arg;
@@ -134,14 +149,20 @@ class LobbyManager {
                         lobbyNamespace.emit('gameStarted', true);
                         lobbyNamespace.emit('updateTime', lobby.currentRoundTime);
 
-                        GPTService.generateQuestion(lobby.settings)
-                            .then((response) => {
-                                lobby.questionData = response.questionData;
-                                lobbyNamespace.emit('loadQuestion', lobby.questionData.map(({ correctAnswersIndexes, ...rest }) => rest)[lobby.currentRoundQuestion]);
-                            })
-                            .catch((error) => {
-                                console.error('Error generating questions:', error);
-                            });
+                        try {
+                            const response = await GPTService.generateQuestion(lobby.settings);
+                            console.log('Response Type:', typeof response);
+                            console.log('Response:', response);
+                        
+                            const parsedResponse = typeof response === 'string' ? JSON.parse(response) : response;
+                            console.log('Parsed Response:', parsedResponse);
+                            console.log('Parsed Response Question Data:', parsedResponse.questionData);
+                        
+                            lobby.questionData = parsedResponse.questionData;
+                            lobbyNamespace.emit('loadQuestion', lobby.questionData.map(({ correctAnswersIndexes, ...rest }) => rest)[lobby.currentRoundQuestion]);
+                        } catch (error) {
+                            console.error('Error generating questions:', error);
+                        }
 
                         clearInterval(lobby.currentRoundTimer);
                         lobby.currentRoundTimer = null;
@@ -155,7 +176,7 @@ class LobbyManager {
                                         clearInterval(lobby.currentRoundTimer);
                                         lobby.currentRoundTimer = null;
                                         lobbyNamespace.emit('endGame');
-                                        calculateScores(lobbyNamespace);
+                                        await calculateScores(lobbyNamespace);
                                     } else {
                                         lobby.currentRoundTime = lobby.settings.timePerQuestion;
                                         lobby.currentGivenSubmits = [];
@@ -200,10 +221,9 @@ class LobbyManager {
         }
     }
 
-    joinPrivateLobby(uuid, username, inviteCode, callback) {
+    async joinPrivateLobby(uuid, username, inviteCode, callback) {
         try {
             const foundLobby = Array.from(this.lobbies.values()).find((lobby) => lobby.inviteCode === inviteCode);
-            console.log(foundLobby);
             if (foundLobby) {
                 foundLobby.players.push({
                     name: username,
@@ -212,12 +232,42 @@ class LobbyManager {
                     data: {
                         score: 0,
                         hasAnswered: false
-                    }
+                    },
+                    score: 0
                 });
                 const response = { id: foundLobby.id };
                 callback(null, response);
             } else {
-                callback(null, {});
+                callback(null, null); 
+            }
+        } catch (error) {
+            callback(error);
+        }
+    }
+    
+    async joinRandomLobby(uuid, username, callback) {
+        try {
+            const foundLobbies = this.getLobbies().filter((lobby) => lobby.players.length < lobby.settings.maxPlayers);
+            if (foundLobbies.length === 0) {
+                callback(null, null);
+                return;
+            }
+            const foundLobby = foundLobbies[Math.floor(Math.random() * foundLobbies.length)];
+            if (foundLobby) {
+                foundLobby.players.push({
+                    name: username,
+                    id: uuid,
+                    isAdmin: false,
+                    data: {
+                        score: 0,
+                        hasAnswered: false
+                    },
+                    score: 0
+                });
+                const response = { id: foundLobby.id };
+                callback(null, response);
+            } else {
+                callback(null, null);
             }
         } catch (error) {
             callback(error);
@@ -228,7 +278,7 @@ class LobbyManager {
         return this.lobbies.get(lobbyId);
     }
 
-    updateSettings(lobbyId, newSettings, playerName) {
+    async updateSettings(lobbyId, newSettings, playerName) {
         const lobby = this.getLobby(lobbyId);
         if (lobby && lobby.admin === playerName) {
             lobby.settings = { ...lobby.settings, ...newSettings };
@@ -237,7 +287,7 @@ class LobbyManager {
         return false;
     }
 
-    addPlayer(lobbyId, playerName, playerUUID) {
+    async addPlayer(lobbyId, playerName, playerUUID) {
         const lobby = this.getLobby(lobbyId);
         if (lobby) {
             lobby.players.push({ name: playerName, id: playerUUID, isAdmin: false });
@@ -246,7 +296,7 @@ class LobbyManager {
         return null;
     }
 
-    removeLobby(lobbyId) {
+    async removeLobby(lobbyId) {
         this.lobbies.delete(lobbyId);
     }
 

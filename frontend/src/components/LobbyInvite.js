@@ -7,7 +7,6 @@ import { Container, Typography, TextField, Button, Box, Grid, Paper } from '@mui
 import { styled } from '@mui/system';
 
 const Background = styled(Box)({
-    backgroundImage: 'url(https://source.unsplash.com/random/?quiz)',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     minHeight: '100vh',
