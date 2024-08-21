@@ -66,7 +66,7 @@ class LobbyManager {
                         const gptResponse = await GPTService.evaluateAnswer(e.question, submit.questionResponse, e.questionType, e.personality);
                         socket.emit('loadQuestionEnd', e);
                         if (e.questionType !== 'checkbox') {
-                            socket.emit('loadQuestionIndividualAnswer', { submit: submit, gpt: gptResponse });
+                            socket.emit('loadQuestionIndividualAnswer', { submit: submit, gpt: JSON.parse(gptResponse)});
                             await sleep(5000);
                         } else {
                             socket.to(submit.socketId).emit('loadQuestionIndividualAnswer', { submit: submit, gpt: null });
@@ -78,9 +78,9 @@ class LobbyManager {
                             if(e.questionType === 'checkbox')
                                 player.score += (e.correctAnswersIndexes.includes(index) && submit.questionAnswers[index] === true) ? 25 : !(e.correctAnswersIndexes.includes(index) && submit.questionAnswers[index] === true) ? -25 : 0;
                             else if(e.questionType === 'response')
-                                player.score += (gptResponse.correctness) * 2.5;
+                                player.score += parseInt(gptResponse.correctness) * 2.5;
                             else
-                                player.score += (gptResponse.correctness) * 1.25 + (gptReponse.personality) * 1.25;
+                                player.score += parseInt(gptResponse.correctness) * 1.25 + parseInt(gptResponse.personality) * 1.25;
                             
                             console.log(player.score);
                             socket.emit('updatePlayerList', lobby.players);
@@ -95,7 +95,7 @@ class LobbyManager {
 
             console.log(lobby.inviteCode);
 
-            lobbyNamespace.on('connection', (socket) => {
+            lobbyNamespace.on('connection', async (socket) => {
                 console.log(`User with id: ${socket.id} connected to lobby ${lobbyId}`);
 
                 socket.on('disconnect', () => {
@@ -122,7 +122,7 @@ class LobbyManager {
                     console.log(lobby.players);
                 });
 
-                socket.on('submitQuestion', (arg) => {
+                socket.on('submitQuestion', async (arg) => {
                     if (!lobby.currentGivenSubmits.find(submit => submit.socketId === socket.id)) {
                         const submitValue = {
                             socketId: socket.id,
@@ -190,7 +190,7 @@ class LobbyManager {
                     }
                 });
 
-                socket.on('validate', (arg) => {
+                socket.on('validate', async (arg) => {
                     let foundPlayer = lobby.players.find(player => player.id == arg);
                     if (foundPlayer != null) {
                         console.log(`User with id: ${arg} validated`);
@@ -285,15 +285,6 @@ class LobbyManager {
             return true;
         }
         return false;
-    }
-
-    async addPlayer(lobbyId, playerName, playerUUID) {
-        const lobby = this.getLobby(lobbyId);
-        if (lobby) {
-            lobby.players.push({ name: playerName, id: playerUUID, isAdmin: false });
-            return lobby;
-        }
-        return null;
     }
 
     async removeLobby(lobbyId) {

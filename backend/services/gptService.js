@@ -82,6 +82,7 @@ const generateQuestion = async (settings) => {
         ]
       }
   
+      MAN YOU NEED TO UNDERSTAND, YOU NEED TO RESPECT THE ABOVE JSON FORMAT, ALWAYS AND ALWAYS, NOT MATTER WHAT, YOU SHOULD HAVE ALL THE VARIABLES!
 
     If the questionType is response I don't need variants of response because the user should respond by typing his response in a textbox.
     If the questionType is checkbox the user will need to select the variants I provide for him.
@@ -104,12 +105,26 @@ const evaluateAnswer = async (question, answer, type, personality) => {
 
   So if ${answer} IS CORRECT, your opinion should make me understand that, but if the answer IS NOT AN CORRECT ANSWER YOU SHOULD tell me THAT the answer IS NOT CORRECT! 
 
+  THE RESPONSE IS A JSON FORMAT WITHOUT /n or \n JUST JSON PURE JSON YOU NEED TO OUTPUT JUST THE JSON!!!!!!!!!!!!!!!!!!!!!
+
+  
   {
     "correctness": 5,
     "personality": 5,
-    "opinion": ""
+    "opinion": "THIS REPONSE MUST BE ON THE SAME LINE"
   }
+
+  ON THE RIGHT IS INVALID JSON ---> {\n    "correctness": 10,\n    "personality": 10,\n  …rect. Leonardo da Vinci painted the Mona Lisa."\n} <-- THIS IS INVALID JSON
+
+  FOR GOD SHAKE, MAKE THE JSON VALID!
   
+      MAN YOU NEED TO UNDERSTAND, YOU NEED TO RESPECT THE ABOVE JSON FORMAT, ALWAYS AND ALWAYS, NOT MATTER WHAT, YOU SHOULD HAVE ALL THE VARIABLES!
+      (OPINION PERSONALITY CORRECTNESS EVEN IF U DONT NEED THEM, PUT THEM WITH AN EMPTY VALUE!!!!!!!!!!!!!!!!!!!!!!!!!!)
+
+      You can't use ' in your response!
+
+      THE REPONSE SHOULD BE A VALID JSON !! YOU NEED TO OUTPUT A 100% REACT COMPTABILE JSON RESPONSE IF NOT NOTHING WORKS!
+
   `;
   const gptResponse = await openai.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
