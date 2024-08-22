@@ -4,15 +4,18 @@ const express = require('express');
 const http = require('http');
 const GPTService = require('./../services/gptService');
 
-class LobbyManager {
+const db = require('./databaseModel');
+const jwtService = require('./../services/tokenService')
+
+class LobbyModel {
     constructor(io) {
-        if (LobbyManager.instance) {
-            return LobbyManager.instance;
+        if (LobbyModel.instance) {
+            return LobbyModel.instance;
         }
 
         this.lobbies = new Map();
         this.io = io;
-        LobbyManager.instance = this;
+        LobbyModel.instance = this;
     }
 
     async createLobby(adminId, username, callback) {
@@ -59,41 +62,68 @@ class LobbyManager {
 
 
             async function calculateScores(socket) {
-                for (const [i, e] of lobby.questionData.entries()) {
+                for (const [i, questionData] of lobby.questionData.entries()) {
                     const currentQuestionSubmits = lobby.allSubmits.filter(submit => submit.questionIndex === i);
-                    let index = 0;
+            
                     for (const submit of currentQuestionSubmits) {
-                        const gptResponse = await GPTService.evaluateAnswer(e.question, submit.questionResponse, e.questionType, e.personality);
-                        socket.emit('loadQuestionEnd', e);
-                        if (e.questionType !== 'checkbox') {
-                            socket.emit('loadQuestionIndividualAnswer', { submit: submit, gpt: JSON.parse(gptResponse)});
+                        let gptResponse = '';
+                        let parsedResponse = {};
+            
+                        if (questionData.questionType !== 'checkbox') {
+                            try {
+                                gptResponse = await GPTService.evaluateAnswer(
+                                    questionData.question,
+                                    submit.questionResponse,
+                                    questionData.questionType,
+                                    questionData.personality
+                                );
+                               
+                                parsedResponse = typeof gptResponse === 'string' ? JSON.parse(gptResponse) : JSON.parse(gptResponse);
+                                parsedResponse = JSON.parse(parsedResponse);
+                            } catch (error) {
+                                console.error('Error parsing or evaluating GPT response:', error);
+                                parsedResponse = {}; 
+                            }
+                        }
+            
+                        let correctness = parseFloat(parsedResponse.correctness) || 0;
+                        let personality = parseFloat(parsedResponse.personality) || 0;
+            
+                        console.log(typeof parsedResponse);
+                        console.log('Parsed Response:', parsedResponse);
+                        console.log('Correctness:', correctness);
+                        console.log('Personality:', personality);
+
+                        socket.emit('loadQuestionEnd', questionData);
+                        if (questionData.questionType !== 'checkbox') {
+                            socket.emit('loadQuestionIndividualAnswer', { submit: submit, gpt: parsedResponse });
                             await sleep(5000);
                         } else {
                             socket.to(submit.socketId).emit('loadQuestionIndividualAnswer', { submit: submit, gpt: null });
                         }
             
                         const player = lobby.players.find(player => player.socketId === submit.socketId);
-                        if (player && Array.isArray(e.correctAnswersIndexes)) {
-                            console.log(gptResponse);
-                            if(e.questionType === 'checkbox')
-                                player.score += (e.correctAnswersIndexes.includes(index) && submit.questionAnswers[index] === true) ? 25 : !(e.correctAnswersIndexes.includes(index) && submit.questionAnswers[index] === true) ? -25 : 0;
-                            else if(e.questionType === 'response')
-                                player.score += parseInt(gptResponse.correctness) * 2.5;
-                            else
-                                player.score += parseInt(gptResponse.correctness) * 1.25 + parseInt(gptResponse.personality) * 1.25;
-                            
-                            console.log(player.score);
+                        if (player && Array.isArray(questionData.correctAnswersIndexes)) {
+                            if (questionData.questionType === 'checkbox') {
+                                player.score += (questionData.correctAnswersIndexes.includes(i) && submit.questionAnswers[i] === true) ? 25 : -25;
+                            } else if (questionData.questionType === 'response') {
+                                player.score += correctness * 5;
+                            } else {
+                                player.score += correctness * 2.5 + personality * 2.5;
+                            }
+                            console.log(`I modified score of ${player.name} with: ${correctness * 5}\n`);
+                            correctness = personality = 0;
                             socket.emit('updatePlayerList', lobby.players);
                         }
                     }
-                    if (e.questionType === 'checkbox') await sleep(5000);
+            
+                    if (questionData.questionType === 'checkbox') await sleep(5000);
                 }
             }
-
+            
             const lobbyNamespace = this.io.of(`/lobby-${lobbyId}`);
             lobby.namespace = lobbyNamespace;
 
-            console.log(lobby.inviteCode);
 
             lobbyNamespace.on('connection', async (socket) => {
                 console.log(`User with id: ${socket.id} connected to lobby ${lobbyId}`);
@@ -119,7 +149,6 @@ class LobbyManager {
                         lobbyNamespace.emit('disconnectAll');
                     }
 
-                    console.log(lobby.players);
                 });
 
                 socket.on('submitQuestion', async (arg) => {
@@ -131,6 +160,10 @@ class LobbyManager {
                             questionResponse: arg.response
                         };
                         lobby.currentGivenSubmits.push(submitValue);
+                        if(arg.jwt != null)
+                        {
+                            db.insertQuestion(jwtService.verifyToken(arg.jwt).data, lobby.questionData[lobby.currentRoundQuestion], submitValue);
+                        }
                         lobby.allSubmits.push(submitValue);
                     }
 
@@ -146,23 +179,19 @@ class LobbyManager {
                         lobby.settings = arg;
                         lobby.currentRoundTime = lobby.settings.timePerQuestion;
 
-                        lobbyNamespace.emit('gameStarted', true);
-                        lobbyNamespace.emit('updateTime', lobby.currentRoundTime);
+                        
 
                         try {
                             const response = await GPTService.generateQuestion(lobby.settings);
-                            console.log('Response Type:', typeof response);
-                            console.log('Response:', response);
-                        
                             const parsedResponse = typeof response === 'string' ? JSON.parse(response) : response;
-                            console.log('Parsed Response:', parsedResponse);
-                            console.log('Parsed Response Question Data:', parsedResponse.questionData);
-                        
                             lobby.questionData = parsedResponse.questionData;
                             lobbyNamespace.emit('loadQuestion', lobby.questionData.map(({ correctAnswersIndexes, ...rest }) => rest)[lobby.currentRoundQuestion]);
                         } catch (error) {
                             console.error('Error generating questions:', error);
                         }
+
+                        lobbyNamespace.emit('gameStarted', true);
+                        lobbyNamespace.emit('updateTime', lobby.currentRoundTime);
 
                         clearInterval(lobby.currentRoundTimer);
                         lobby.currentRoundTimer = null;
@@ -193,7 +222,6 @@ class LobbyManager {
                 socket.on('validate', async (arg) => {
                     let foundPlayer = lobby.players.find(player => player.id == arg);
                     if (foundPlayer != null) {
-                        console.log(`User with id: ${arg} validated`);
                         foundPlayer.socketId = socket.id;
                         socket.emit('validated', true);
                         if (foundPlayer.isAdmin === true) {
@@ -201,13 +229,11 @@ class LobbyManager {
                         }
                         lobbyNamespace.emit('updatePlayerList', lobby.players);
                     } else {
-                        console.log(`User with id: ${arg} failed to validate`);
                         socket.emit('validated', false);
                     }
                 });
 
                 socket.on('message', (msg) => {
-                    console.log(`Received from ${socket.id} the message: ${msg}`);
                     lobbyNamespace.emit('message', msg);
                 });
             });
@@ -296,4 +322,4 @@ class LobbyManager {
     }
 }
 
-module.exports = (io) => new LobbyManager(io);
+module.exports = (io) => new LobbyModel(io);

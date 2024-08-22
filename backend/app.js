@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const database = require('./database');
 
 const createLobbyManager = require('./models/lobbyModel');
+const AuthentificationModel = require('./models/authentificationModel'); 
 
 const gpt = require('./services/gptService');
 
@@ -14,19 +15,20 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {origin:"http://localhost:3000", methods: ["GET", "POST"]},
 });
-const lobbyManager = createLobbyManager(io);
-const gameRoutes = require('./routes/gameRoutes')(lobbyManager);
+
+const lobbyModel = createLobbyManager(io);
+const authentificationModel = new AuthentificationModel(); 
+const gameRoutes = require('./routes/gameRoutes')(lobbyModel, authentificationModel);
+
 app.use('/api', gameRoutes);
 
 app.get('/', (req, res) => {
     res.send('Server is running');
 });
-
 
 const PORT = process.env.PORT || 5000;
 
